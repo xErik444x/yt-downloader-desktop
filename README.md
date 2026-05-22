@@ -25,7 +25,7 @@ pnpm start
 pnpm run build
 ```
 
-El instalador se genera en la carpeta `dist/` como `YTDlDesktop Setup 1.0.0.exe`.
+El ejecutable portable se genera en la carpeta `dist/` como `YTDlDesktop 1.0.0.exe`. No requiere instalacion, solo ejecutarlo.
 
 ## Uso
 

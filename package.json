@@ -12,13 +12,12 @@
     "appId": "com.yt-dl-desktop.app",
     "productName": "YTDlDesktop",
     "win": {
-      "target": "nsis",
+      "target": "portable",
       "icon": null,
       "signAndEditExecutable": false
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+    "portable": {
+      "splashImage": null
     }
   },
   "keywords": [],
