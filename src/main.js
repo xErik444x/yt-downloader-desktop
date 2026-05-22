@@ -6,6 +6,12 @@ import util from 'util';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 
+// Startup performance optimizations
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion,WinUseBrowserSpellChecker');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256');
+
 const execPromise = util.promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);

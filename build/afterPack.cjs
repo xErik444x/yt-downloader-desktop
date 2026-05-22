@@ -9,9 +9,10 @@ exports.default = async function(context) {
     'LICENSE.electron.txt',
     'vk_swiftshader.dll',
     'vk_swiftshader_icd.json',
+    'vulkan-1.dll',
+    'd3dcompiler_47.dll',
     'dxcompiler.dll',
-    'dxil.dll',
-    'vulkan-1.dll'
+    'dxil.dll'
   ];
 
   for (const file of filesToRemove) {
