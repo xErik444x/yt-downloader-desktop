@@ -3,7 +3,6 @@
 Aplicacion de escritorio para descargar videos y audio de YouTube y otros sitios usando [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
 ## Requisitos
-
 - [Node.js](https://nodejs.org/) (v18 o superior)
 - [pnpm](https://pnpm.io/)
 
@@ -47,3 +46,4 @@ yt-dl-desktop/
 ├── dist/                # Build output (generado)
 └── package.json
 ```
+![imagen](https://i.imgur.com/LVish9P.png)
