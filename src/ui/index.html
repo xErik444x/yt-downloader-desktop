@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Downloader Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+  <!-- Custom Titlebar for premium frameless window look -->
+  <div class="titlebar" id="custom-titlebar">
+    <div class="titlebar-drag-region"></div>
+    <div class="titlebar-logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29.02 29.02 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29.02 29.02 0 0 0 23 12a29 29 0 0 0-.46-5.58z" fill="url(#brand-grad)"/>
+        <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/>
+        <defs>
+          <linearGradient id="brand-grad" x1="1" y1="12" x2="23" y2="12" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#8b5cf6" />
+            <stop offset="100%" stop-color="#d946ef" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span>YT Downloader Pro</span>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- Dependencies Status Banner -->
+    <div id="dependency-banner" class="banner hidden">
+      <div class="banner-content">
+        <div class="banner-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="banner-text">
+          <h4 id="dep-banner-title">Dependencias Faltantes</h4>
+          <p id="dep-banner-desc">Se requiere yt-dlp y FFmpeg para realizar descargas y conversiones de audio.</p>
+          
+          <!-- Dependency download progress grid -->
+          <div id="dep-progress-container" class="dep-progress-grid hidden">
+            <div id="dep-ytdl-progress" class="dep-progress-item hidden">
+              <span class="dep-name">yt-dlp:</span>
+              <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 0%"></div></div>
+              <span class="dep-pct">0%</span>
+            </div>
+            <div id="dep-ffmpeg-progress" class="dep-progress-item hidden">
+              <span class="dep-name">FFmpeg:</span>
+              <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 0%"></div></div>
+              <span class="dep-pct">0%</span>
+            </div>
+          </div>
+        </div>
+        <button id="download-deps-btn" class="btn btn-primary btn-sm">Instalar Ahora</button>
+      </div>
+    </div>
+
+    <!-- Main URL Input -->
+    <section class="section search-section">
+      <div class="input-group">
+        <span class="input-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </span>
+        <input type="text" id="url-input" placeholder="Pega el enlace del video o playlist aquí..." autocomplete="off">
+        <button id="paste-btn" class="btn btn-secondary btn-icon-only" title="Pegar desde el portapapeles">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button id="analyze-btn" class="btn btn-primary btn-gradient">
+          <span id="btn-text">Analizar</span>
+          <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Error Display -->
+    <div id="error-container" class="error-card hidden">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="error-message">Ha ocurrido un error al analizar la URL.</span>
+    </div>
+
+    <!-- Dynamic Metadata Details Section -->
+    <section id="meta-details-section" class="section details-section hidden">
+      <div id="meta-details-content" class="glass-card">
+        <!-- Will be dynamically populated by renderer.js -->
+      </div>
+    </section>
+
+    <!-- Downloads Manager Section -->
+    <section class="section downloads-section flex-grow">
+      <div class="downloads-header">
+        <h3 class="section-title">
+          Descargas
+          <span id="download-count-badge" class="badge">0</span>
+        </h3>
+        <button id="open-folder-btn" class="btn btn-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Abrir Carpeta
+        </button>
+      </div>
+
+      <div class="output-directory-container">
+        <span class="output-dir-label">Guardar en:</span>
+        <strong id="output-dir-path" title="Cargando...">Cargando...</strong>
+        <button id="change-dir-btn" class="btn btn-link btn-sm" style="padding: 0 4px; font-weight: 600;">[Cambiar]</button>
+      </div>
+
+      <div id="downloads-container" class="downloads-list">
+        <div id="empty-downloads" class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <p>No hay descargas activas o recientes.</p>
+          <span>Pega un enlace arriba para comenzar.</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="renderer.js" type="module"></script>
+</body>
+</html>
