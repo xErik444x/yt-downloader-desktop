@@ -380,8 +380,10 @@ ipcMain.handle('start-download', (event, options) => {
   }
   
   // Playlist settings
-  if (playlistItems) {
-    args.push('--playlist-items', playlistItems);
+  if (playlistItems !== null && playlistItems !== undefined) {
+    if (playlistItems !== '') {
+      args.push('--playlist-items', playlistItems);
+    }
     // Put playlist in its own subfolder
     args.push('-o', path.join(downloadFolder, '%(playlist_title)s', '%(playlist_index)s - %(title)s.%(ext)s'));
   } else {
@@ -485,16 +487,22 @@ ipcMain.handle('start-download', (event, options) => {
 });
 
 // 5. IPC Handler: Cancel Download
-ipcMain.handle('cancel-download', (event, downloadId) => {
+ipcMain.handle('cancel-download', async (event, downloadId) => {
   const child = activeDownloads.get(downloadId);
   if (child) {
     try {
-      child.kill();
+      if (process.platform === 'win32') {
+        // On Windows use taskkill to forcefully terminate the process tree
+        await execPromise(`taskkill /F /T /PID ${child.pid}`);
+      } else {
+        child.kill('SIGKILL');
+      }
       activeDownloads.delete(downloadId);
       return { success: true };
     } catch (error) {
-      console.error(`Error killing download ${downloadId}:`, error);
-      return { success: false, error: error.message };
+      // If taskkill fails because process already exited, that's fine
+      activeDownloads.delete(downloadId);
+      return { success: true };
     }
   }
   return { success: false, error: 'Download not found or already completed' };

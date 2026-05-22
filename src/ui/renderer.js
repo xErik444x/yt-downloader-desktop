@@ -516,7 +516,7 @@ async function triggerPlaylistDownload() {
   const rangeInput = document.getElementById('playlist-range');
   const format = formatSelect.value;
   const isAudio = format === 'audio-only';
-  const range = rangeInput.value.trim() || null;
+  const range = rangeInput.value.trim();
 
   const downloadId = 'dl-' + Date.now();
   const title = currentUrlData.title;
