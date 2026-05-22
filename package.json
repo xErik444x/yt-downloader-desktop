@@ -1,6 +1,6 @@
 {
   "name": "yt-dl-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "",
   "main": "src/main.js",
   "scripts": {
@@ -11,7 +11,18 @@
   "build": {
     "appId": "com.yt-dl-desktop.app",
     "productName": "YTDlDesktop",
-    "compression": "store",
+    "compression": "normal",
+    "afterPack": "build/afterPack.cjs",
+    "electronLanguages": ["es", "en"],
+    "files": [
+      "src/**/*",
+      "package.json",
+      "build/**/*",
+      "!node_modules",
+      "!.github",
+      "!dist",
+      "!bin"
+    ],
     "win": {
       "target": "portable",
       "icon": null,
