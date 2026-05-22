@@ -27,6 +27,8 @@ const downloadsContainer = document.getElementById('downloads-container');
 const emptyDownloads = document.getElementById('empty-downloads');
 const downloadCountBadge = document.getElementById('download-count-badge');
 const openFolderBtn = document.getElementById('open-folder-btn');
+const outputDirPath = document.getElementById('output-dir-path');
+const changeDirBtn = document.getElementById('change-dir-btn');
 
 // --- Helper Functions ---
 function formatDuration(seconds) {
@@ -47,8 +49,21 @@ function updateBadgeCount() {
 // --- App Initialization ---
 async function init() {
   await checkDependencies();
+  await updateDownloadFolderDisplay();
   setupEventListeners();
   setupIpcListeners();
+}
+
+async function updateDownloadFolderDisplay() {
+  try {
+    const currentFolder = await window.api.getDownloadFolder();
+    if (outputDirPath) {
+      outputDirPath.textContent = currentFolder;
+      outputDirPath.title = currentFolder;
+    }
+  } catch (error) {
+    console.error('Error getting download folder:', error);
+  }
 }
 
 // Check if binaries are installed
@@ -109,6 +124,21 @@ function setupEventListeners() {
   openFolderBtn.addEventListener('click', async () => {
     await window.api.openDownloadFolder();
   });
+
+  // Change downloads folder selection
+  if (changeDirBtn) {
+    changeDirBtn.addEventListener('click', async () => {
+      try {
+        const selectedDir = await window.api.selectDownloadFolder();
+        if (selectedDir && outputDirPath) {
+          outputDirPath.textContent = selectedDir;
+          outputDirPath.title = selectedDir;
+        }
+      } catch (error) {
+        console.error('Error selecting folder:', error);
+      }
+    });
+  }
 }
 
 // Listen for updates from Main process

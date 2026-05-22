@@ -11,7 +11,9 @@ const execPromise = util.promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectDir = path.join(__dirname, '..');
-const binPath = path.join(projectDir, 'bin');
+const binPath = app.isPackaged
+  ? path.join(app.getPath('userData'), 'bin')
+  : path.join(projectDir, 'bin');
 
 // Create bin folder if it doesn't exist
 if (!fs.existsSync(binPath)) {

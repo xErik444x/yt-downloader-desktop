@@ -756,3 +756,30 @@ h1, h2, h3, h4 {
 .hidden {
   display: none !important;
 }
+
+/* --- Output Directory Selector --- */
+.output-directory-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+
+.output-directory-container strong {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 65%;
+}
+
+.output-dir-label {
+  font-weight: 500;
+}
+
