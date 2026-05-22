@@ -29,7 +29,12 @@ if (!fs.existsSync(binPath)) {
 let mainWindow = null;
 const activeDownloads = new Map();
 let isYtdlpDownloading = false;
+let isSpotdlDownloading = false;
 let customDownloadFolder = null;
+
+function isSpotifyUrl(url) {
+  return url.includes('spotify.com/') || url.includes('open.spotify.com/');
+}
 
 function getDownloadFolder() {
   return customDownloadFolder || app.getPath('downloads');
@@ -56,6 +61,38 @@ async function ensureYtdlp() {
   } finally {
     isYtdlpDownloading = false;
   }
+}
+
+async function ensureSpotdl() {
+  const spotdlPath = path.join(binPath, 'spotdl.exe');
+  if (fs.existsSync(spotdlPath) || isSpotdlDownloading) {
+    return;
+  }
+  
+  isSpotdlDownloading = true;
+  console.log('spotdl.exe is missing. Downloading automatically on boot...');
+  
+  try {
+    const spotdlUrl = await getLatestSpotdlUrl();
+    await downloadWithProgress(spotdlUrl, spotdlPath, 'spotdl');
+    console.log('spotdl.exe downloaded successfully on boot.');
+    if (mainWindow) {
+      mainWindow.webContents.send('dependencies-updated');
+    }
+  } catch (error) {
+    console.error('Failed to download spotdl on boot:', error);
+  } finally {
+    isSpotdlDownloading = false;
+  }
+}
+
+async function getLatestSpotdlUrl() {
+  const response = await fetch('https://api.github.com/repos/spotDL/spotify-downloader/releases/latest');
+  if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
+  const release = await response.json();
+  const asset = release.assets.find(a => a.name.endsWith('-win32.exe'));
+  if (!asset) throw new Error('No Windows executable found in latest release');
+  return asset.browser_download_url;
 }
 
 function createWindow() {
@@ -102,6 +139,7 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   ensureYtdlp();
+  ensureSpotdl();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -122,11 +160,13 @@ function getExePaths() {
   const fallbackYtdl = path.join(projectDir, 'youtube-dl.exe');
   const ffmpeg = path.join(binPath, 'ffmpeg.exe');
   const ffprobe = path.join(binPath, 'ffprobe.exe');
+  const spotdl = path.join(binPath, 'spotdl.exe');
 
   return {
     ytdlp: fs.existsSync(ytdlp) ? ytdlp : (fs.existsSync(fallbackYtdl) ? fallbackYtdl : null),
     ffmpeg: fs.existsSync(ffmpeg) ? ffmpeg : null,
-    ffprobe: fs.existsSync(ffprobe) ? ffprobe : null
+    ffprobe: fs.existsSync(ffprobe) ? ffprobe : null,
+    spotdl: fs.existsSync(spotdl) ? spotdl : null
   };
 }
 
@@ -135,7 +175,8 @@ ipcMain.handle('check-dependencies', () => {
   const paths = getExePaths();
   return {
     ytdl: paths.ytdlp !== null,
-    ffmpeg: paths.ffmpeg !== null && paths.ffprobe !== null
+    ffmpeg: paths.ffmpeg !== null && paths.ffprobe !== null,
+    spotdl: paths.spotdl !== null
   };
 });
 
@@ -215,6 +256,24 @@ ipcMain.handle('download-dependency', async (event, depName) => {
       
       return { success: true };
     }
+
+    if (depName === 'spotdl') {
+      if (isSpotdlDownloading) {
+        while (isSpotdlDownloading) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+        return { success: true };
+      }
+      const spotdlUrl = await getLatestSpotdlUrl();
+      const dest = path.join(binPath, 'spotdl.exe');
+      isSpotdlDownloading = true;
+      try {
+        await downloadWithProgress(spotdlUrl, dest, 'spotdl');
+      } finally {
+        isSpotdlDownloading = false;
+      }
+      return { success: true };
+    }
     
     throw new Error(`Unknown dependency: ${depName}`);
   } catch (error) {
@@ -253,9 +312,51 @@ function runExec(args) {
   });
 }
 
+// Helper to run spotdl and get string stdout
+function runSpotdl(args) {
+  const paths = getExePaths();
+  if (!paths.spotdl) {
+    throw new Error('spotdl.exe was not found. Please install Spotify dependency.');
+  }
+  
+  // Add ffmpeg path if available
+  const finalArgs = [];
+  if (paths.ffmpeg) {
+    finalArgs.push('--ffmpeg', paths.ffmpeg);
+  }
+  finalArgs.push(...args);
+  
+  return new Promise((resolve, reject) => {
+    const child = spawn(paths.spotdl, finalArgs);
+    let stdout = '';
+    let stderr = '';
+    
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+    
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(stderr || `Process exited with code ${code}`));
+      }
+    });
+  });
+}
+
 // 3. IPC Handler: Analyze URL (Detect playlist/video and fetch metadata)
 ipcMain.handle('analyze-url', async (event, url) => {
   try {
+    // Check if it's a Spotify URL
+    if (isSpotifyUrl(url)) {
+      return await analyzeSpotifyUrl(url);
+    }
+
     // Check flat playlist first to make it fast
     const flatData = await runExec(['--dump-json', '--flat-playlist', url]);
     
@@ -348,10 +449,82 @@ ipcMain.handle('analyze-url', async (event, url) => {
   }
 });
 
+// Helper to analyze Spotify URLs
+async function analyzeSpotifyUrl(url) {
+  try {
+    const cleanUrl = url.split('?')[0];
+    const parts = cleanUrl.split('/');
+    const typeIndex = parts.findIndex(p => ['track', 'playlist', 'album', 'artist', 'episode', 'show'].includes(p));
+    
+    if (typeIndex === -1 || typeIndex >= parts.length - 1) {
+      return { error: 'URL de Spotify no válida. Asegúrate de que sea un link de track, playlist o álbum.' };
+    }
+    
+    const spotifyType = parts[typeIndex];
+    const spotifyId = parts[typeIndex + 1];
+
+    // Try oEmbed API (works for playlists/albums, not tracks)
+    if (spotifyType === 'playlist' || spotifyType === 'album') {
+      try {
+        const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+        const response = await fetch(oembedUrl);
+        
+        if (response.ok) {
+          const oembedData = await response.json();
+          return {
+            type: 'spotify-playlist',
+            title: oembedData.title || `Spotify ${spotifyType === 'playlist' ? 'Playlist' : 'Album'}`,
+            artist: oembedData.author_name || 'Unknown',
+            count: 0,
+            duration: 0,
+            thumbnail: oembedData.thumbnail_url || null,
+            id: spotifyId,
+            entries: []
+          };
+        }
+      } catch (err) {
+        console.warn('oEmbed failed, using fallback:', err.message);
+      }
+    }
+
+    // Fallback for tracks or if oEmbed fails
+    if (spotifyType === 'track') {
+      return {
+        type: 'spotify-track',
+        title: `Spotify Track (${spotifyId})`,
+        artist: 'Unknown Artist',
+        album: 'Spotify',
+        duration: 0,
+        thumbnail: null,
+        id: spotifyId
+      };
+    }
+
+    return {
+      type: 'spotify-playlist',
+      title: `Spotify ${spotifyType.charAt(0).toUpperCase() + spotifyType.slice(1)}`,
+      artist: 'Unknown',
+      count: 0,
+      duration: 0,
+      thumbnail: null,
+      id: spotifyId,
+      entries: []
+    };
+  } catch (error) {
+    console.error('Error analyzing Spotify URL:', error);
+    return { error: `Error analizando URL de Spotify: ${error.message}` };
+  }
+}
+
 // 4. IPC Handler: Start Download
 ipcMain.handle('start-download', (event, options) => {
   const { url, format, isAudio, playlistItems, downloadId } = options;
   const paths = getExePaths();
+  
+  // Check if it's a Spotify URL
+  if (isSpotifyUrl(url)) {
+    return startSpotifyDownload({ url, isAudio, playlistItems, downloadId });
+  }
   
   if (!paths.ytdlp) {
     return { success: false, error: 'yt-dlp not found' };
@@ -491,6 +664,207 @@ ipcMain.handle('start-download', (event, options) => {
     return { success: false, error: error.message };
   }
 });
+
+// Helper to start Spotify download using spotdl
+function startSpotifyDownload(options) {
+  const { url, isAudio, playlistItems, downloadId } = options;
+  const paths = getExePaths();
+  
+  if (!paths.spotdl) {
+    return { success: false, error: 'spotdl.exe not found' };
+  }
+  
+  const downloadFolder = getDownloadFolder();
+  
+  // Clean URL - remove query parameters (spotdl rejects ?si=... params)
+  const cleanUrl = url.split('?')[0];
+  
+  // Build args - URL must come right after subcommand for spotdl
+  const args = [
+    'download',
+    cleanUrl,
+    '--output', path.join(downloadFolder, '{artists}', '{title}'),
+    '--format', 'mp3',
+    '--bitrate', '320k',
+    '--simple-tui',
+  ];
+  
+  // Add ffmpeg path if available
+  if (paths.ffmpeg) {
+    args.push('--ffmpeg', paths.ffmpeg);
+  }
+  
+  try {
+    const child = spawn(paths.spotdl, args, { cwd: downloadFolder });
+    activeDownloads.set(downloadId, child);
+    
+    const progressRegex = /\[(\d+)%\]/;
+    const tqdmRegex = /(\d{1,3})%\|/;
+    const trackRegex = /Downloading\s+(\d+)\s+of\s+(\d+)/i;
+    const foundSongsRegex = /Found\s+(\d+)\s+songs?\s+in/i;
+    const trackDownloadedRegex = /Downloaded\s+"[^"]*"/i;
+    const allDoneRegex = /All\s+done|Done|Finished/i;
+    
+    // Send initial status
+    if (mainWindow) {
+      mainWindow.webContents.send('download-progress', {
+        downloadId,
+        status: 'downloading',
+        percent: 0,
+        speed: '-',
+        size: '-',
+        eta: 'Buscando canciones...'
+      });
+    }
+    
+    let lastPercent = 0;
+    let totalSongs = 0;
+    let downloadedCount = 0;
+    
+    child.stdout.on('data', (data) => {
+      const text = data.toString();
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const foundMatch = line.match(foundSongsRegex);
+        if (foundMatch && mainWindow) {
+          totalSongs = parseInt(foundMatch[1], 10);
+          mainWindow.webContents.send('download-progress', {
+            downloadId,
+            status: 'playlist-track',
+            currentTrack: 0,
+            totalTracks: totalSongs
+          });
+          continue;
+        }
+        
+        const progressMatch = line.match(progressRegex) || line.match(tqdmRegex);
+        if (progressMatch && mainWindow) {
+          const percent = parseFloat(progressMatch[1]);
+          if (percent >= lastPercent) {
+            lastPercent = percent;
+            mainWindow.webContents.send('download-progress', {
+              downloadId,
+              status: 'downloading',
+              percent,
+              speed: '-',
+              size: '-',
+              eta: '-'
+            });
+          }
+          continue;
+        }
+        
+        const trackMatch = line.match(trackRegex);
+        if (trackMatch && mainWindow) {
+          const current = parseInt(trackMatch[1], 10);
+          const total = parseInt(trackMatch[2], 10);
+          totalSongs = total;
+          mainWindow.webContents.send('download-progress', {
+            downloadId,
+            status: 'playlist-track',
+            currentTrack: current,
+            totalTracks: total
+          });
+          continue;
+        }
+        
+        if (trackDownloadedRegex.test(line)) {
+          downloadedCount++;
+          if (mainWindow && totalSongs > 0) {
+            const overallPercent = Math.min(99, Math.round((downloadedCount / totalSongs) * 100));
+            mainWindow.webContents.send('download-progress', {
+              downloadId,
+              status: 'playlist-track',
+              currentTrack: downloadedCount,
+              totalTracks: totalSongs
+            });
+          }
+          continue;
+        }
+        
+        if (allDoneRegex.test(line) && mainWindow) {
+          mainWindow.webContents.send('download-progress', {
+            downloadId,
+            status: 'downloading',
+            percent: 100,
+            speed: '-',
+            size: '-',
+            eta: 'Completado'
+          });
+          continue;
+        }
+      }
+    });
+    
+    child.stderr.on('data', (data) => {
+      const text = data.toString();
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const progressMatch = line.match(progressRegex) || line.match(tqdmRegex);
+        if (progressMatch && mainWindow) {
+          const percent = parseFloat(progressMatch[1]);
+          if (percent >= lastPercent) {
+            lastPercent = percent;
+            mainWindow.webContents.send('download-progress', {
+              downloadId,
+              status: 'downloading',
+              percent,
+              speed: '-',
+              size: '-',
+              eta: '-'
+            });
+          }
+          continue;
+        }
+        
+        const foundMatch = line.match(foundSongsRegex);
+        if (foundMatch && mainWindow) {
+          totalSongs = parseInt(foundMatch[1], 10);
+          mainWindow.webContents.send('download-progress', {
+            downloadId,
+            status: 'playlist-track',
+            currentTrack: 0,
+            totalTracks: totalSongs
+          });
+          continue;
+        }
+        
+        if (trackDownloadedRegex.test(line)) {
+          downloadedCount++;
+          if (mainWindow && totalSongs > 0) {
+            mainWindow.webContents.send('download-progress', {
+              downloadId,
+              status: 'playlist-track',
+              currentTrack: downloadedCount,
+              totalTracks: totalSongs
+            });
+          }
+          continue;
+        }
+      }
+    });
+    
+    child.on('close', (code) => {
+      activeDownloads.delete(downloadId);
+      if (mainWindow) {
+        if (code === 0) {
+          mainWindow.webContents.send('download-finished', { downloadId });
+        } else {
+          mainWindow.webContents.send('download-error', { 
+            downloadId, 
+            error: `spotdl exited with code ${code}. Verifica la URL de Spotify.` 
+          });
+        }
+      }
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to spawn spotdl:', error);
+    activeDownloads.delete(downloadId);
+    return { success: false, error: error.message };
+  }
+}
 
 // 5. IPC Handler: Cancel Download
 ipcMain.handle('cancel-download', async (event, downloadId) => {

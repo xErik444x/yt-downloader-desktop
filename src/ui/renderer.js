@@ -10,6 +10,7 @@ const downloadDepsBtn = document.getElementById('download-deps-btn');
 const depProgressContainer = document.getElementById('dep-progress-container');
 const depYtdlProgress = document.getElementById('dep-ytdl-progress');
 const depFfmpegProgress = document.getElementById('dep-ffmpeg-progress');
+const depSpotdlProgress = document.getElementById('dep-spotdl-progress');
 
 const urlInput = document.getElementById('url-input');
 const pasteBtn = document.getElementById('paste-btn');
@@ -71,18 +72,26 @@ async function checkDependencies() {
   try {
     const deps = await window.api.checkDependencies();
     
-    if (!deps.ytdl || !deps.ffmpeg) {
+    if (!deps.ytdl || !deps.ffmpeg || !deps.spotdl) {
       depBanner.classList.remove('hidden');
       
-      if (!deps.ytdl && !deps.ffmpeg) {
+      const missingDeps = [];
+      if (!deps.ytdl) missingDeps.push('yt-dlp');
+      if (!deps.ffmpeg) missingDeps.push('FFmpeg');
+      if (!deps.spotdl) missingDeps.push('spotdl (Spotify)');
+      
+      if (missingDeps.length > 1) {
         depBannerTitle.textContent = 'Faltan Componentes Críticos';
-        depBannerDesc.textContent = 'Para descargar y convertir medios, necesitamos instalar yt-dlp y FFmpeg en tu carpeta local.';
+        depBannerDesc.textContent = `Para descargar y convertir medios, necesitamos instalar ${missingDeps.join(', ')} en tu carpeta local.`;
       } else if (!deps.ytdl) {
         depBannerTitle.textContent = 'Falta yt-dlp';
         depBannerDesc.textContent = 'El motor de descarga yt-dlp no está presente. Haz clic abajo para instalarlo.';
-      } else {
+      } else if (!deps.ffmpeg) {
         depBannerTitle.textContent = 'Falta FFmpeg';
         depBannerDesc.textContent = 'FFmpeg es necesario para fusionar videos en alta calidad y convertir archivos a MP3.';
+      } else if (!deps.spotdl) {
+        depBannerTitle.textContent = 'Falta spotdl (Spotify)';
+        depBannerDesc.textContent = 'spotdl es necesario para descargar música de Spotify. Haz clic abajo para instalarlo.';
       }
     } else {
       depBanner.classList.add('hidden');
@@ -172,6 +181,14 @@ function setupIpcListeners() {
       bar.style.width = `100%`;
       pctText.textContent = 'Extrayendo...';
     }
+
+    if (dependency === 'spotdl') {
+      depSpotdlProgress.classList.remove('hidden');
+      const bar = depSpotdlProgress.querySelector('.progress-bar-fill');
+      const pctText = depSpotdlProgress.querySelector('.dep-pct');
+      bar.style.width = `${percent}%`;
+      pctText.textContent = `${percent}%`;
+    }
   });
 
   // 2. Media Download Progress
@@ -188,7 +205,11 @@ function setupIpcListeners() {
     const detailText = card.querySelector('.download-detail');
 
     if (status === 'playlist-track') {
-      if (detailText) detailText.textContent = `Descargando pista ${currentTrack} de ${totalTracks}...`;
+      if (totalTracks > 0 && currentTrack === 0) {
+        if (detailText) detailText.textContent = `Playlist detectada: ${totalTracks} canciones. Buscando en YouTube...`;
+      } else if (currentTrack > 0 && totalTracks > 0) {
+        if (detailText) detailText.textContent = `Descargando pista ${currentTrack} de ${totalTracks}...`;
+      }
     }
 
     if (status === 'downloading') {
@@ -302,6 +323,12 @@ async function installDependencies() {
       await window.api.downloadDependency('ffmpeg');
     }
 
+    if (!deps.spotdl) {
+      depProgressContainer.classList.remove('hidden');
+      depSpotdlProgress.classList.remove('hidden');
+      await window.api.downloadDependency('spotdl');
+    }
+
     // Refresh state
     await checkDependencies();
     
@@ -310,6 +337,7 @@ async function installDependencies() {
       depProgressContainer.classList.add('hidden');
       depYtdlProgress.classList.add('hidden');
       depFfmpegProgress.classList.add('hidden');
+      depSpotdlProgress.classList.add('hidden');
       downloadDepsBtn.disabled = false;
       downloadDepsBtn.textContent = 'Instalar Ahora';
     }, 2000);
@@ -351,7 +379,7 @@ async function analyzeUrl() {
     
   } catch (error) {
     console.error('Error analyzing URL:', error);
-    errorMessage.textContent = `No se pudo analizar el enlace. Asegúrate de que sea un enlace válido de YouTube. Detalle: ${error.message}`;
+    errorMessage.textContent = `No se pudo analizar el enlace. Asegúrate de que sea un enlace válido de YouTube o Spotify. Detalle: ${error.message}`;
     errorContainer.classList.remove('hidden');
   } finally {
     // Hide spinner
@@ -475,6 +503,75 @@ function renderMetadata(data) {
     `;
 
     document.getElementById('start-dl-playlist-btn').addEventListener('click', triggerPlaylistDownload);
+
+  } else if (data.type === 'spotify-track') {
+    // Render Spotify Single Track
+    metaContent.innerHTML = `
+      <div class="meta-layout">
+        <div class="meta-thumbnail-wrapper">
+          <img class="meta-thumbnail" src="${data.thumbnail || 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?q=80&w=300'}" alt="Spotify Cover">
+          <span class="meta-duration">${formatDuration(data.duration)}</span>
+        </div>
+        
+        <div class="meta-info">
+          <h3 class="meta-title" title="${data.title}">${data.title}</h3>
+          <div class="meta-uploader">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg>
+            <span>${data.artist} • ${data.album}</span>
+          </div>
+
+          <div class="download-options-grid">
+            <div class="option-group" style="justify-content: flex-end;">
+              <button id="start-dl-spotify-btn" class="btn btn-primary btn-gradient" style="width: 100%;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Descargar Audio (MP3)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('start-dl-spotify-btn').addEventListener('click', triggerSpotifyTrackDownload);
+
+  } else if (data.type === 'spotify-playlist') {
+    // Render Spotify Playlist/Album
+    const tracksHTML = data.entries.map(t => `
+      <div class="playlist-track-row">
+        <span class="playlist-track-title">${t.index}. ${t.title}${t.artist ? ` - ${t.artist}` : ''}</span>
+        <span class="playlist-track-duration">${formatDuration(t.duration)}</span>
+      </div>
+    `).join('');
+
+    metaContent.innerHTML = `
+      <div class="meta-info">
+        <h3 class="meta-title" title="${data.title}">🎵 Spotify: ${data.title}</h3>
+        <div class="meta-uploader">
+          <span>${data.count > 0 ? `Contiene <strong>${data.count}</strong> canciones` : 'Playlist de Spotify'}</span>
+          ${data.artist && data.artist !== 'Unknown' ? `<span style="margin-left: 8px;">• ${data.artist}</span>` : ''}
+        </div>
+
+        <div class="playlist-preview">
+          ${tracksHTML}
+        </div>
+
+        <div class="download-options-grid">
+          <div class="option-group">
+            <label for="playlist-range">Rango de Descarga (Opcional)</label>
+            <input type="text" id="playlist-range" class="text-input" placeholder="Ej: 1-5, 8, 10-15 (Vacío para todo)">
+          </div>
+          
+          <div class="option-group" style="justify-content: flex-end;">
+            <button id="start-dl-spotify-playlist-btn" class="btn btn-primary btn-gradient" style="min-width: 200px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Descargar Playlist (MP3)
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('start-dl-spotify-playlist-btn').addEventListener('click', triggerSpotifyPlaylistDownload);
   }
 }
 
@@ -544,13 +641,73 @@ async function triggerPlaylistDownload() {
   }
 }
 
+// Start Spotify track download trigger
+async function triggerSpotifyTrackDownload() {
+  const downloadId = 'dl-' + Date.now();
+  const title = `${currentUrlData.title} - ${currentUrlData.artist}`;
+  
+  createDownloadCard({
+    downloadId,
+    title,
+    isAudio: true,
+    isPlaylist: false,
+    isSpotify: true
+  });
+
+  const result = await window.api.startDownload({
+    url: urlInput.value.trim(),
+    isAudio: true,
+    downloadId
+  });
+
+  if (!result.success) {
+    window.api.onDownloadError({ downloadId, error: result.error });
+  } else {
+    activeDownloads.set(downloadId, true);
+    updateBadgeCount();
+  }
+}
+
+// Start Spotify playlist download trigger
+async function triggerSpotifyPlaylistDownload() {
+  const rangeInput = document.getElementById('playlist-range');
+  const range = rangeInput.value.trim();
+
+  const downloadId = 'dl-' + Date.now();
+  const title = currentUrlData.title;
+
+  createDownloadCard({
+    downloadId,
+    title,
+    isAudio: true,
+    isPlaylist: true,
+    isSpotify: true
+  });
+
+  const result = await window.api.startDownload({
+    url: urlInput.value.trim(),
+    isAudio: true,
+    playlistItems: range,
+    downloadId
+  });
+
+  if (!result.success) {
+    window.api.onDownloadError({ downloadId, error: result.error });
+  } else {
+    activeDownloads.set(downloadId, true);
+    updateBadgeCount();
+  }
+}
+
 // Create Card in Downloads Manager UI
-function createDownloadCard({ downloadId, title, isAudio, isPlaylist }) {
+function createDownloadCard({ downloadId, title, isAudio, isPlaylist, isSpotify }) {
   // Hide empty downloads text
   emptyDownloads.classList.add('hidden');
 
   let typeBadge = '';
-  if (isPlaylist) {
+  if (isSpotify) {
+    typeBadge = '<span class="download-badge badge-spotify">Spotify</span>';
+  } else if (isPlaylist) {
     typeBadge = '<span class="download-badge badge-playlist">Playlist</span>';
   } else if (isAudio) {
     typeBadge = '<span class="download-badge badge-audio">Audio</span>';

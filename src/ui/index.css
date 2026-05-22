@@ -640,6 +640,11 @@ h1, h2, h3, h4 {
   color: hsl(142, 70%, 70%);
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
+.badge-spotify {
+  background: rgba(30, 215, 96, 0.15);
+  color: #1ed760;
+  border: 1px solid rgba(30, 215, 96, 0.3);
+}
 
 /* Progress Layout */
 .progress-container {
