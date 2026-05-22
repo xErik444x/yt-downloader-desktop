@@ -1,6 +1,6 @@
 {
   "name": "yt-dl-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "",
   "main": "src/main.js",
   "scripts": {
@@ -11,6 +11,7 @@
   "build": {
     "appId": "com.yt-dl-desktop.app",
     "productName": "YTDlDesktop",
+    "publish": null,
     "compression": "maximum",
     "afterPack": "build/afterPack.cjs",
     "electronLanguages": ["es", "en"],
